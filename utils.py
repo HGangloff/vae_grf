@@ -87,7 +87,7 @@ def get_train_dataloader(args, fake_dataset_size=None):
         raise RuntimeError("No / Wrong dataset provided")
 
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size,
-        shuffle=False if args.dataset == "ssl_vqvae" else True)
+        shuffle=True)
 
     return train_dataloader, train_dataset
 
