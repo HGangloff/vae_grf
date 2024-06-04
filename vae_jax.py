@@ -56,10 +56,10 @@ class VAE(eqx.Module):
         #self.norm_2 = eqx.nn.BatchNorm(input_size=64, axis_name="batch")
         #self.norm_3 = eqx.nn.BatchNorm(input_size=128, axis_name="batch")
 
-        self.norm1 = eqx.nn.BatchNorm(input_size=128, axis_name="batch")
-        self.norm2 = eqx.nn.BatchNorm(input_size=64, axis_name="batch")
-        self.norm3 = eqx.nn.BatchNorm(input_size=32, axis_name="batch")
-        
+        self.norm1 = eqx.nn.BatchNorm(input_size=128, axis_name=["batch", "mcmc"])
+        self.norm2 = eqx.nn.BatchNorm(input_size=64, axis_name=["batch", "mcmc"])
+        self.norm3 = eqx.nn.BatchNorm(input_size=32, axis_name=["batch", "mcmc"])
+ 
 
     def encoder(self, x: Array, state: Array, key: Key) -> tuple[Array, Array]:
         z, state = self.resnet(x, state, key)
@@ -90,15 +90,13 @@ class VAE(eqx.Module):
         return x, state
 
     def reparametrize(
-        self, mu: Array, logvar: Array, key: Key, train: Bool, n_mcmc: Int=50
+        self, mu: Array, logvar: Array, key: Key, train: Bool, n_mcmc: Int=10
     ) -> Array:
         if train:
             std = jnp.exp(0.5 * logvar)
             eps = jax.random.normal(key, shape=(n_mcmc,) + std.shape)
-            print(eps.shape)
             return eps * std[None] + mu[None]
-        else:
-            return mu[None]
+        return mu[None]
 
     def __call__(
         self, x: Array, state : Array, key: Key, train: Bool
@@ -107,17 +105,22 @@ class VAE(eqx.Module):
         mu, logvar = z[:self.z_dim], z[self.z_dim:]
         z_samples = self.reparametrize(mu, logvar, key, train)
 
-        def scan_fun(carry, z_sample):
-            key = carry[0]
-            key, subkey = jax.random.split(key, 2)
-            x_rec, state = self.decoder(z_sample, carry[1], key)
-            return (key, state), x_rec
+        #def scan_fun(carry, z_sample):
+        #    key = carry[0]
+        #    key, subkey = jax.random.split(key, 2)
+        #    x_rec, state = self.decoder(z_sample, carry[1], key)
+        #    return (key, state), x_rec
 
-        (_, state), x_rec = jax.lax.scan(
-            scan_fun,
-            (key, state),
-            z_samples
-        )
+        #(_, state), x_rec = jax.lax.scan(
+        #    scan_fun,
+        #    (key, state),
+        #    z_samples
+        #)
+
+        v_decoder = jax.vmap(self.decoder, (0, None, None), (0, None), axis_name="mcmc")
+        x_rec, state = v_decoder(z_samples, state, key)
+
+        #x_rec, state = self.decoder(z_samples.squeeze(), state, key)
         return x_rec, state, mu, logvar
 
     def xent_continuous_ber(
@@ -139,12 +142,11 @@ class VAE(eqx.Module):
             return (x * jnp.log(x_rec + eps) +
                             (1 - x) * jnp.log(1 - x_rec + eps) +
                             log_norm_const(x_rec))
-        else:
-            return jnp.mean(
-                jnp.sum(x * jnp.log(x_rec + eps) +
-                        (1 - x) * jnp.log(1 - x_rec + eps) +
-                        log_norm_const(x_rec), axis=0 # sum on the channels
-                ))
+        return jnp.mean(
+            jnp.sum(x * jnp.log(x_rec + eps) +
+            (1 - x) * jnp.log(1 - x_rec + eps) +
+            log_norm_const(x_rec), axis=0 # sum on the channels
+        ))
 
     @classmethod
     def mean_from_lambda(self, l: Array) -> Array:
@@ -164,13 +166,17 @@ class VAE(eqx.Module):
         )
 
     def elbo(self, x_rec, x, mu, logvar, beta):
-        _, rec_terms = jax.lax.scan(
-            lambda _, x_rec: (None, self.xent_continuous_ber(x_rec, x)),
-            None,
-            x_rec
-        )
-        rec_term = jnp.mean(rec_terms)
-        #rec_term = -jnp.mean((x_rec-x)**2)#self.xent_continuous_ber(x_rec, x)
+        #print(x_rec.shape)
+        #_, rec_terms = jax.lax.scan(
+        #    lambda _, x_rec: (None, self.xent_continuous_ber(x_rec, x)),
+        #    None,
+        #    x_rec
+        #)
+        #print(rec_terms.shape)
+        #rec_term = jnp.mean(rec_terms)
+        #rec_term = self.xent_continuous_ber(x_rec, x)
+        print(x_rec.shape)
+        rec_term = -jnp.mean((x_rec-x[None])**2)
         #minus_kld = 0
         minus_kld = self.minus_kld(mu, logvar)
 
