@@ -56,9 +56,9 @@ class VAE(eqx.Module):
         #self.norm_2 = eqx.nn.BatchNorm(input_size=64, axis_name="batch")
         #self.norm_3 = eqx.nn.BatchNorm(input_size=128, axis_name="batch")
 
-        self.norm1 = eqx.nn.BatchNorm(input_size=128, axis_name=["batch", "mcmc"])
-        self.norm2 = eqx.nn.BatchNorm(input_size=64, axis_name=["batch", "mcmc"])
-        self.norm3 = eqx.nn.BatchNorm(input_size=32, axis_name=["batch", "mcmc"])
+        self.norm1 = eqx.nn.BatchNorm(input_size=128, axis_name="batch", momentum=0.1)
+        self.norm2 = eqx.nn.BatchNorm(input_size=64, axis_name="batch", momentum=0.1)
+        self.norm3 = eqx.nn.BatchNorm(input_size=32, axis_name="batch", momentum=0.1)
  
 
     def encoder(self, x: Array, state: Array, key: Key) -> tuple[Array, Array]:
@@ -89,8 +89,13 @@ class VAE(eqx.Module):
         x = jax.nn.sigmoid(x)
         return x, state
 
+    def v_decoder(self, z, state, key):
+        v_decoder = jax.vmap(self.decoder, (0, None, None), (0, None), axis_name="mcmc")
+        x_rec, state = v_decoder(z, state, key)
+        return x_rec, state
+
     def reparametrize(
-        self, mu: Array, logvar: Array, key: Key, train: Bool, n_mcmc: Int=10
+        self, mu: Array, logvar: Array, key: Key, train: Bool, n_mcmc: Int=1
     ) -> Array:
         if train:
             std = jnp.exp(0.5 * logvar)
@@ -101,9 +106,10 @@ class VAE(eqx.Module):
     def __call__(
         self, x: Array, state : Array, key: Key, train: Bool
     ) -> tuple[Array, Array]:
-        z, state = self.encoder(x, state, key)
+        keys = jax.random.split(key, 3)
+        z, state = self.encoder(x, state, keys[0])
         mu, logvar = z[:self.z_dim], z[self.z_dim:]
-        z_samples = self.reparametrize(mu, logvar, key, train)
+        z_samples = self.reparametrize(mu, logvar, keys[1], train)
 
         #def scan_fun(carry, z_sample):
         #    key = carry[0]
@@ -117,10 +123,10 @@ class VAE(eqx.Module):
         #    z_samples
         #)
 
-        v_decoder = jax.vmap(self.decoder, (0, None, None), (0, None), axis_name="mcmc")
-        x_rec, state = v_decoder(z_samples, state, key)
 
-        #x_rec, state = self.decoder(z_samples.squeeze(), state, key)
+        #x_rec, state = self.v_decoder(z_samples, state, key)
+
+        x_rec, state = self.decoder(z_samples.squeeze(), state, keys[2])
         return x_rec, state, mu, logvar
 
     def xent_continuous_ber(
@@ -174,9 +180,8 @@ class VAE(eqx.Module):
         #)
         #print(rec_terms.shape)
         #rec_term = jnp.mean(rec_terms)
-        #rec_term = self.xent_continuous_ber(x_rec, x)
-        print(x_rec.shape)
-        rec_term = -jnp.mean((x_rec-x[None])**2)
+        rec_term = self.xent_continuous_ber(x_rec, x)
+        #rec_term = -jnp.mean((x_rec-x)**2)
         #minus_kld = 0
         minus_kld = self.minus_kld(mu, logvar)
 

@@ -67,10 +67,10 @@ class _ResNetBasicBlock(eqx.nn.StatefulLayer, eqx.Module):
         keys = jrandom.split(key, 2)
         self.expansion = 1
         self.conv1 = _conv3x3(inplanes, planes, stride, key=keys[0])
-        self.bn1 = norm_layer(planes, axis_name="batch")
+        self.bn1 = norm_layer(planes, axis_name="batch", momentum=0.1)
         self.relu = jnn.relu
         self.conv2 = _conv3x3(planes, planes, key=keys[1])
-        self.bn2 = norm_layer(planes, axis_name="batch")
+        self.bn2 = norm_layer(planes, axis_name="batch", momentum=0.1)
         if downsample:
             self.downsample = downsample
         else:
@@ -132,11 +132,11 @@ class _ResNetBottleneck(eqx.Module):
         width = int(planes * (base_width / 64.0)) * groups
         # Both self.conv2 and self.downsample layers downsample the input when stride != 1
         self.conv1 = _conv1x1(inplanes, width, key=keys[0])
-        self.bn1 = norm_layer(width, axis_name="batch")
+        self.bn1 = norm_layer(width, axis_name="batch", momentum=0.1)
         self.conv2 = _conv3x3(width, width, stride, groups, dilation, key=keys[1])
-        self.bn2 = norm_layer(width, axis_name="batch")
+        self.bn2 = norm_layer(width, axis_name="batch", momentum=0.1)
         self.conv3 = _conv1x1(width, planes * self.expansion, key=keys[2])
-        self.bn3 = norm_layer(planes * self.expansion, axis_name="batch")
+        self.bn3 = norm_layer(planes * self.expansion, axis_name="batch", momentum=0.1)
         self.relu = jnn.relu
         if downsample:
             self.downsample = downsample
@@ -255,7 +255,7 @@ class ResNet(eqx.Module):
             use_bias=False,
             key=keys[0],
         )
-        self.bn1 = norm_layer(input_size=self.inplanes, axis_name="batch")
+        self.bn1 = norm_layer(input_size=self.inplanes, axis_name="batch", momentum=0.1)
         self.relu = jnn.relu
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         self.layer1 = self._make_layer(block, 64, layers[0], norm_layer, key=keys[1])
@@ -290,7 +290,7 @@ class ResNet(eqx.Module):
         # we want a latent img size of 32 with a convolutional latent space so
         # the final convolution is added
         self.final_convolution = eqx.nn.Conv2d(in_channels=128, out_channels=2
-                * 256, kernel_size=1, stride=1, padding=0, key=keys[5])
+                * 32, kernel_size=1, stride=1, padding=0, key=keys[5])
         #self.fc = nn.Linear(131072, 2 * 256, key=keys[5])
 
     def _make_layer(
@@ -308,7 +308,7 @@ class ResNet(eqx.Module):
                     _conv1x1(
                         self.inplanes, planes * EXPANSIONS[block], stride, key=keys[0]
                     ),
-                    norm_layer(planes * EXPANSIONS[block], axis_name="batch"),
+                    norm_layer(planes * EXPANSIONS[block], axis_name="batch", momentum=0.1),
                 ]
             )
 
