@@ -290,7 +290,7 @@ class ResNet(eqx.Module):
         # we want a latent img size of 32 with a convolutional latent space so
         # the final convolution is added
         self.final_convolution = eqx.nn.Conv2d(in_channels=128, out_channels=2
-                * 32, kernel_size=1, stride=1, padding=0, key=keys[5])
+                * 256, kernel_size=1, stride=1, padding=0, key=keys[5])
         #self.fc = nn.Linear(131072, 2 * 256, key=keys[5])
 
     def _make_layer(

@@ -1,7 +1,7 @@
 import equinox as eqx
 import jax
 import jax.numpy as jnp
-from jaxtyping import Int, Key, Bool, Array
+from jaxtyping import Int, Key, Bool, Array, Float
 from resnet import resnet18, ResNet
 
 class VAE(eqx.Module):
@@ -25,9 +25,13 @@ class VAE(eqx.Module):
     norm2: eqx.nn.BatchNorm
     norm3: eqx.nn.BatchNorm
 
+    img_size: Int
+    latent_img_size: Int
     z_dim: Int
     
-    def __init__(self, z_dim: Int, key: Key):
+    def __init__(self, img_size: Int, latent_img_size: Int, z_dim: Int, key: Key):
+        self.img_size = img_size
+        self.latent_img_size = latent_img_size
         self.z_dim = z_dim
         self.resnet = resnet18(
             key=key
@@ -166,12 +170,13 @@ class VAE(eqx.Module):
         )
         return l / (2 * l - 1) + 1 / (2 * jnp.arctanh(1 - 2 * l))
 
-    def minus_kld(self, mu, logvar):
+    def minus_kld(self, mu: Array, logvar: Array) -> Array:
         return 0.5 * jnp.mean(
                 1 + logvar - mu ** 2 - jnp.exp(logvar),
         )
 
-    def elbo(self, x_rec, x, mu, logvar, beta):
+    def elbo(self, x_rec: Array, x: Array, mu: Array, logvar: Array,
+            beta: Float) -> Array:
         #print(x_rec.shape)
         #_, rec_terms = jax.lax.scan(
         #    lambda _, x_rec: (None, self.xent_continuous_ber(x_rec, x)),
