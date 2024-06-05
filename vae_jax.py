@@ -1,3 +1,4 @@
+import dataclasses
 import equinox as eqx
 import jax
 import jax.numpy as jnp
@@ -5,47 +6,31 @@ from jaxtyping import Int, Key, Bool, Array, Float
 from resnet import resnet18, ResNet
 
 class VAE(eqx.Module):
-    resnet: ResNet
 
-    #conv1: eqx.nn.Conv2d
-    #conv2: eqx.nn.Conv2d
-    #conv3: eqx.nn.Conv2d
-    #conv4: eqx.nn.Conv2d
-
-    upconv1: eqx.nn.ConvTranspose2d
-    upconv2: eqx.nn.ConvTranspose2d
-    upconv3: eqx.nn.ConvTranspose2d
-    upconv4: eqx.nn.ConvTranspose2d
-    
-    #norm_1: eqx.nn.BatchNorm
-    #norm_2: eqx.nn.BatchNorm
-    #norm_3: eqx.nn.BatchNorm
-
-    norm1: eqx.nn.BatchNorm
-    norm2: eqx.nn.BatchNorm
-    norm3: eqx.nn.BatchNorm
-
+    # __init__ args order is important! Those are required in __init__ call.
+    # The automatic __init__() constructed by dataclasses just perform the
+    # assignement
     img_size: Int
     latent_img_size: Int
     z_dim: Int
+    init_key: dataclasses.InitVar[Key] # not a true field, there are just here to be passed
+    # to __init__ and __post_init__
     
-    def __init__(self, img_size: Int, latent_img_size: Int, z_dim: Int, key: Key):
-        self.img_size = img_size
-        self.latent_img_size = latent_img_size
-        self.z_dim = z_dim
+    # init=False otherwise they are required in __init__ call 
+    resnet: ResNet = eqx.field(init=False)
+    upconv1: eqx.nn.ConvTranspose2d = eqx.field(init=False)
+    upconv2: eqx.nn.ConvTranspose2d = eqx.field(init=False)
+    upconv3: eqx.nn.ConvTranspose2d = eqx.field(init=False)
+    upconv4: eqx.nn.ConvTranspose2d = eqx.field(init=False)
+    norm1: eqx.nn.BatchNorm = eqx.field(init=False)
+    norm2: eqx.nn.BatchNorm = eqx.field(init=False)
+    norm3: eqx.nn.BatchNorm = eqx.field(init=False)
+
+    def __post_init__(self, init_key: Key):
+        keys = jax.random.split(init_key, 5)
         self.resnet = resnet18(
-            key=key
+            key=keys[4]
         )
-        keys = jax.random.split(key, 5)
-        #self.conv1 = eqx.nn.Conv2d(in_channels=3, out_channels=64,
-        #    kernel_size=7, stride=2, padding=3, key=keys[0])
-        #self.conv2 = eqx.nn.Conv2d(in_channels=64, out_channels=64,
-        #    kernel_size=4, stride=2, padding=1, key=keys[1])
-        #self.conv3 = eqx.nn.Conv2d(in_channels=64, out_channels=128,
-        #    kernel_size=4, stride=2, padding=1, key=keys[2])
-        #self.conv4 = eqx.nn.Conv2d(in_channels=128, out_channels=2 * self.z_dim,
-        #    kernel_size=1, stride=1, padding=0, key=keys[3])
-        keys = jax.random.split(keys[4], 4)
         self.upconv1 = eqx.nn.ConvTranspose2d(in_channels=self.z_dim,
                 out_channels=128,
             kernel_size=1, stride=1, padding=0, key=keys[0])
@@ -55,10 +40,6 @@ class VAE(eqx.Module):
             kernel_size=4, stride=2, padding=1, key=keys[2])
         self.upconv4 = eqx.nn.ConvTranspose2d(in_channels=32, out_channels=3,
             kernel_size=4, stride=2, padding=1, key=keys[3])
-
-        #self.norm_1 = eqx.nn.BatchNorm(input_size=64, axis_name="batch")
-        #self.norm_2 = eqx.nn.BatchNorm(input_size=64, axis_name="batch")
-        #self.norm_3 = eqx.nn.BatchNorm(input_size=128, axis_name="batch")
 
         self.norm1 = eqx.nn.BatchNorm(input_size=128, axis_name="batch", momentum=0.1)
         self.norm2 = eqx.nn.BatchNorm(input_size=64, axis_name="batch", momentum=0.1)
