@@ -21,64 +21,65 @@ class VAE_GRF(VAE):
         # instanciate and this raises an error
         self.array_of_E_dist = self.get_euclidean_dist_torus_array(self.latent_img_size,
                 self.latent_img_size)
-        self.logrange_prior = jnp.array(0.)
-        self.logvar_prior = jnp.array(0.)
+        self.logrange_prior = jnp.array(jnp.log(0.001))
+        self.logvar_prior = jnp.array(jnp.log(1.))
 
     def corr_fct(self, array: Array) -> Float:
         if self.corr_type == "exp":
             return self.corr_exp(array)
+        if self.corr_type == "m32":
+            return self.corr_matern_32(array)
         raise ValueError("Unknown correlation type")
 
     def minus_kld(self, mu: Array, logvar: Array) -> Array:
-        print(mu.shape, logvar.shape)
         covar_base_prior = self.corr_fct(
             self.array_of_E_dist
         )[None]
-        print(covar_base_prior.shape)
         inv_covar_base_prior = self.get_base_invert(covar_base_prior)
-        print(inv_covar_base_prior.shape)
 
-        #mu_col = jnp.transpose(mu, axes=(0, 2, 1)).reshape(mu.shape[0], -1)
-        #print(mu_col.shape)
+        mu_col = mu.reshape(mu.shape[0], -1)
         invSigma_times_mu_col = self.get_matrix_vector_product(
             inv_covar_base_prior,
             mu # NOTE check the order !
-        ).transpose((0, 2, 1)).reshape(mu.shape[0], -1, 1)
-        print(invSigma_times_mu_col.shape)
+        ).reshape(mu.shape[0], -1)
 
-        log_det_covar = self.get_logdeterminant_base(covar_base_prior)
-        print(log_det_covar.shape)
+        log_det_covar = self.get_logdeterminant_base(covar_base_prior).squeeze()
 
-        #return 0.5 * jnp.mean(
-        #    ##### E_{q(z|x)}[p(x|z)] #####
-        #    # log det \Sigma
-        #    -self.get_logdeterminant_base(covar_base_prior).squeeze() -
+        # Tr(\Sigma^-1 m m.T)
+        trace_1 = jnp.sum(invSigma_times_mu_col * mu_col, axis=-1)
 
-        #    # Tr(\Sigma^-1 m m.T)
-        #    torch.sum(
-        #        torch.mul(
-        #            invSigma_times_mu_col,
-        #            mu_col[..., None]
-        #        ),
-        #        dim=(-1, -2)
-        #    ).squeeze() -
+        # Tr(\Sigma^-1 * diag(\sigma1,...,\sigmaN))
+        trace_2 = jnp.sum(inv_covar_base_prior[:, 0, 0] * jnp.exp(logvar),
+                axis=(1, 2))
 
-        #    # Tr(\Sigma^-1 * diag(\sigma1,...,\sigmaN)) # model A2
-        #    torch.sum(
-        #        torch.mul(
-        #            #inv_covar_base_prior[:, :, 0, 0],
-        #            inv_covar_base_prior[:, 0, 0, 0][:, None, None, None],
-        #            var_
-        #        ),
-        #        dim=(-1, -2)
-        #    ).squeeze() +
-        #    #####  E_{q(z|x)}[q(z|x)] #####
-        #    # log det L
-        #    torch.sum(self.logvar, dim=(-1, -2)) +
-        #    # N
-        #    self.latent_img_size ** 2,
-        #    dim=1
-        #)
+        # log det L
+        log_det_L = jnp.sum(logvar, axis=(1, 2))
+
+
+        # To check the equivalency with the vanilla VAE
+        # if logrange_prior = log(0.001) and logvar_prior = log(1)
+        #jax.debug.print("trace_1 {x}", x=(trace_1[0], jnp.sum(mu[0]**2)))
+        #jax.debug.print("trace_2 {x}", x=(trace_2[0],
+        #    jnp.sum(jnp.exp(logvar[0]))))
+        #jax.debug.print("logdet covar {x}", x=(log_det_covar, 0))
+        #jax.debug.print("logdet L {x}", x=(log_det_L[0],
+        #    jnp.sum(logvar[0])))
+
+        # N
+        N = self.latent_img_size ** 2
+
+        # average over the latent_size**2 to be equal to KLD in VAE
+        return 0.5*1/N*jnp.mean(- log_det_covar - trace_1 - trace_2 + N + log_det_L)
+
+    def log_likelihood_grf(self, x):
+        """
+        compute the log density of a N-2D multivariate gaussian distributions
+        x is of dimensions (N, latent_size, latent_size)
+        """
+        covar_base_prior = self.corr_fct(
+            self.array_of_E_dist
+        )[None]
+        inv_covar_base_prior = self.get_base_invert(covar_base_prior)
 
     def corr_exp(self, a: Array) -> Float:
         """
@@ -88,7 +89,17 @@ class VAE_GRF(VAE):
         """
         range_ = jnp.exp(self.logrange_prior)
         var_ = jnp.exp(self.logvar_prior)
-        return var_[None] * jnp.exp(-a / range_[None])
+        return var_ * jnp.exp(-a / range_)
+
+    def corr_matern_32(self, a: Array) -> Float:
+        """
+        Return the value of the matern 3/2 correlation function for all
+        distances given in a at the current parameter value of self.logrange_prior and
+        self.logvar_prior
+        """
+        range_ = jnp.exp(self.logrange_prior)
+        var_ = jnp.exp(self.logvar_prior)
+        return var_ * (a / range_ + 1) * jnp.exp(-a / range_)
 
     def euclidean_dist_torus(self, x1: Array, x2: Array, lx: Int, ly: Int) -> Float:
         """
@@ -149,11 +160,12 @@ class VAE_GRF(VAE):
         v is the lx * ly 1D vector
         return a lx * ly 1D vector
         '''
-        return jnp.real(
+        lx, ly = b.shape[-1], b.shape[-2]
+        return jnp.sqrt(lx * ly) * jnp.real(
                     jnp.fft.fft2(
                         jnp.fft.fft2(b, norm="ortho") *
-                        jnp.fft.ifft2(v, norm="ortho")
-                    )
+                        jnp.fft.ifft2(v, norm="ortho"),
+                    norm="ortho")
                 )
  
     def get_base_invert(self, b):
@@ -176,6 +188,7 @@ class VAE_GRF(VAE):
         Expects a [Channels, W, H], everything is vectorized over the
         first two channels
         '''
-        B = jnp.fft.fft2(covar_bases) # default = no normalization : OK!
+        lx, ly = covar_bases.shape[-1], covar_bases.shape[-2]
+        B = jnp.sqrt(lx * ly) * jnp.fft.fft2(covar_bases, norm="ortho")
         logdet = jnp.sum(jnp.log(jnp.real(B)), axis=(-2, -1))
         return logdet
