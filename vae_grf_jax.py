@@ -21,7 +21,7 @@ class VAE_GRF(VAE):
         # instanciate and this raises an error
         self.array_of_E_dist = self.get_euclidean_dist_torus_array(self.latent_img_size,
                 self.latent_img_size)
-        self.logrange_prior = jnp.array(jnp.log(0.001))
+        self.logrange_prior = jnp.array(jnp.log(0.5))
         self.logvar_prior = jnp.array(jnp.log(1.))
 
     def corr_fct(self, array: Array) -> Float:
@@ -40,7 +40,7 @@ class VAE_GRF(VAE):
         mu_col = mu.reshape(mu.shape[0], -1)
         invSigma_times_mu_col = self.get_matrix_vector_product(
             inv_covar_base_prior,
-            mu # NOTE check the order !
+            mu
         ).reshape(mu.shape[0], -1)
 
         log_det_covar = self.get_logdeterminant_base(covar_base_prior).squeeze()
@@ -74,12 +74,30 @@ class VAE_GRF(VAE):
     def log_likelihood_grf(self, x):
         """
         compute the log density of a N-2D multivariate gaussian distributions
-        x is of dimensions (N, latent_size, latent_size)
+        x is of dimensions (N, latent_img_size, latent_img_size)
         """
         covar_base_prior = self.corr_fct(
             self.array_of_E_dist
         )[None]
         inv_covar_base_prior = self.get_base_invert(covar_base_prior)
+
+        mu = jnp.mean(x, axis=(1, 2))
+        x_norm_col = (x - mu[:, None, None]).reshape(x.shape[0], -1)
+
+        invSigma_times_x_norm_col = self.get_matrix_vector_product(
+            inv_covar_base_prior,
+            x_norm_col,
+        ).reshape(x_norm_col.shape[0], -1)
+        # Tr(\Sigma^-1 m m.T)
+        trace = jnp.sum(invSigma_times_x_norm_col * x_norm_col, axis=-1)
+
+        log_det_covar = self.get_logdeterminant_base(covar_base_prior).squeeze()
+
+        N = self.latent_img_size ** 2
+
+        # average over the latent dimensions
+        return 0.5 * 1 / N * jnp.mean(-N * jnp.log(2 * jnp.pi) - log_det_covar
+                - trace)
 
     def corr_exp(self, a: Array) -> Float:
         """
@@ -177,7 +195,7 @@ class VAE_GRF(VAE):
         B = jnp.fft.fft2(b, norm='ortho')
         res = 1 / (lx * ly) * jnp.real(
             jnp.fft.ifft2(
-                B ** (-1),
+                (B + 1e-6) ** (-1),
                 norm='ortho'
             )
         )
@@ -190,5 +208,5 @@ class VAE_GRF(VAE):
         '''
         lx, ly = covar_bases.shape[-1], covar_bases.shape[-2]
         B = jnp.sqrt(lx * ly) * jnp.fft.fft2(covar_bases, norm="ortho")
-        logdet = jnp.sum(jnp.log(jnp.real(B)), axis=(-2, -1))
+        logdet = jnp.sum(jnp.log(jnp.real(B) + 1e-6), axis=(-2, -1))
         return logdet
