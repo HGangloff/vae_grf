@@ -10,19 +10,19 @@ import torch
 DEFAULT_LIVESTOCK_DIR = "./data/livestock/part_III_cropped"
 
 class LivestockTrainDataset(Dataset):
-    def __init__(self, img_size, fake_dataset_size):
+    def __init__(self, img_size, fake_dataset_size, offset_idx=0):
         if os.path.isdir(DEFAULT_LIVESTOCK_DIR):
             self.img_dir = os.path.join(DEFAULT_LIVESTOCK_DIR, "Train")
         else:
             self.img_dir = UNDEFINE
-        self.img_files = list(
-                            np.random.choice(
-                                [os.path.join(self.img_dir, img)
+        #self.img_files = #list(
+                         #   np.random.choice(
+        self.img_files = [os.path.join(self.img_dir, img)
                             for img in os.listdir(self.img_dir)
                             if (os.path.isfile(os.path.join(self.img_dir,
-                            img)) and img.endswith('jpg'))],
-                            size=fake_dataset_size)
-                            )
+                            img)) and img.endswith('jpg'))]#,
+                            #size=fake_dataset_size)
+                            #)
         self.fake_dataset_size = fake_dataset_size # needed otherwise there are
         # 125000 images, and this is too much
         self.transform = transforms.Compose([
@@ -33,12 +33,13 @@ class LivestockTrainDataset(Dataset):
         ]) 
         self.nb_img = len(self.img_files)
         self.nb_channels = 3
+        self.offset_idx = offset_idx
 
     def __len__(self):
-        return max(self.nb_img, self.fake_dataset_size)
+        return self.nb_img if self.fake_dataset_size is None else self.fake_dataset_size
 
     def __getitem__(self, index):
-        index = index % self.nb_img
+        index = self.offset_idx + index % self.nb_img
         img = Image.open(self.img_files[index])
         
         return self.transform(img), 1 # one if the ground truth if there is one
