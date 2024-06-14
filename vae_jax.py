@@ -48,16 +48,6 @@ class VAE(eqx.Module):
 
     def encoder(self, x: Array, state: Array, key: Key) -> tuple[Array, Array]:
         z, state = self.resnet(x, state, key)
-        #x = self.conv1(x)
-        #x, state = self.norm_1(x, state)
-        #x = jax.nn.relu(x)
-        #x = self.conv2(x)
-        #x, state = self.norm_2(x, state)
-        #x = jax.nn.relu(x)
-        #x = self.conv3(x)
-        #x, state = self.norm_3(x, state)
-        #x = jax.nn.relu(x)
-        #z = self.conv4(x)
         return z, state
 
     def decoder(self, z: Array, state: Array, key: Key) -> tuple[Array, Array]:
@@ -95,21 +85,6 @@ class VAE(eqx.Module):
         z, state = self.encoder(x, state, keys[0])
         mu, logvar = z[:self.z_dim], z[self.z_dim:]
         z_samples = self.reparametrize(mu, logvar, keys[1], train)
-
-        #def scan_fun(carry, z_sample):
-        #    key = carry[0]
-        #    key, subkey = jax.random.split(key, 2)
-        #    x_rec, state = self.decoder(z_sample, carry[1], key)
-        #    return (key, state), x_rec
-
-        #(_, state), x_rec = jax.lax.scan(
-        #    scan_fun,
-        #    (key, state),
-        #    z_samples
-        #)
-
-
-        #x_rec, state = self.v_decoder(z_samples, state, key)
 
         x_rec, state = self.decoder(z_samples.squeeze(), state, keys[2])
         return x_rec, state, mu, logvar
@@ -158,17 +133,7 @@ class VAE(eqx.Module):
 
     def elbo(self, x_rec: Array, x: Array, mu: Array, logvar: Array,
             beta: Float) -> Array:
-        #print(x_rec.shape)
-        #_, rec_terms = jax.lax.scan(
-        #    lambda _, x_rec: (None, self.xent_continuous_ber(x_rec, x)),
-        #    None,
-        #    x_rec
-        #)
-        #print(rec_terms.shape)
-        #rec_term = jnp.mean(rec_terms)
         rec_term = self.xent_continuous_ber(x_rec, x)
-        #rec_term = -jnp.mean((x_rec-x)**2)
-        #minus_kld = 0
         minus_kld = self.minus_kld(mu, logvar)
 
         L = (rec_term + beta * minus_kld)
