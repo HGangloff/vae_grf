@@ -1,4 +1,6 @@
 import os
+import sys
+sys.path.insert(0, "../") 
 import argparse
 import numpy as np
 import time
@@ -15,8 +17,6 @@ from utils import (get_train_dataloader,
                    print_loss_logs,
                    parse_args
                    )
-
-import sys
 
 def train(model, train_loader, device, optimizer, epoch):
 
@@ -37,6 +37,7 @@ def train(model, train_loader, device, optimizer, epoch):
         (-loss).backward()
         train_loss += loss.item()
         loss_dict = update_loss_dict(loss_dict, loss_dict_new)
+        print(loss_dict)
         optimizer.step()
     nb_mb_it = (len(train_loader.dataset) // input_mb.shape[0])
     train_loss /= nb_mb_it

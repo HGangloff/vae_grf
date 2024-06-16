@@ -21,7 +21,7 @@ class VAE(nn.Module):
         # convolution incease depth by 2 starting at 32 after the first
         self.max_depth_conv = 2 ** (4 + self.nb_conv)
         
-        self.resnet = resnet18(pretrained=False)
+        self.resnet = resnet18(weights=None)
         self.resnet_entry = nn.Sequential(
             nn.Conv2d(self.nb_channels, 64, kernel_size=7,
                 stride=2, padding=3, bias=False),
@@ -35,8 +35,8 @@ class VAE(nn.Module):
             self.resnet.layer3,
             self.resnet.layer4 
         ]
-        self.encoder_layers = [self.resnet_entry] 
-        for i in range(1, self.nb_conv): 
+        self.encoder_layers = [self.resnet_entry]
+        for i in range(1, self.nb_conv):
             try:
                 self.encoder_layers.append(self.resnet18_layer_list[i - 1])
             except IndexError: 
@@ -125,9 +125,9 @@ class VAE(nn.Module):
                             (1 - x) * torch.log(1 - recon_x + eps) +
                             log_norm_const(recon_x))
         else:
-            return torch.sum(x * torch.log(recon_x + eps) +
+            return torch.mean(torch.sum(x * torch.log(recon_x + eps) +
                             (1 - x) * torch.log(1 - recon_x + eps) +
-                            log_norm_const(recon_x), dim=(1, 2, 3))
+                            log_norm_const(recon_x), dim=(1, )), dim=(1, 2))
 
     def mean_from_lambda(self, l):
         ''' because the mean of a continuous bernoulli is not its lambda '''
@@ -138,9 +138,9 @@ class VAE(nn.Module):
 
     def kld(self):
         # NOTE -kld actually
-        return 0.5 * torch.sum(
+        return 0.5 * torch.mean(
                 1 + self.logvar - self.mu.pow(2) - self.logvar.exp(),
-            dim=(1)
+            dim=(1, 2, 3)
         )
 
     def loss_function(self, recon_x, x):

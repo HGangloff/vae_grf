@@ -7,7 +7,7 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 import torch
 
-DEFAULT_LIVESTOCK_DIR = "./data/livestock/part_III_cropped"
+DEFAULT_LIVESTOCK_DIR = "../data/livestock/part_III_cropped"
 
 class LivestockTrainDataset(Dataset):
     def __init__(self, img_size, fake_dataset_size, offset_idx=0):

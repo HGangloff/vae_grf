@@ -5,7 +5,7 @@ python3 vae_train.py\
     --dataset=livestock\
     --category=wood\
     --lr=1e-4\
-    --num_epochs=200\
+    --num_epochs=1\
     --img_size=256\
     --batch_size=16\
     --batch_size_test=8\
