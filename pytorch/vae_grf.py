@@ -1,3 +1,4 @@
+import math
 import numpy as np
 import torch
 from torch import nn
@@ -29,11 +30,12 @@ class VAE_GRF(VAE):
             raise RuntimeError("Unrecognized corr type")
 
         self.logrange_prior = nn.Parameter(
-            torch.log(torch.Tensor([0.001]))
+            torch.log(torch.Tensor([1]))
         )
         self.logsigma_prior = nn.Parameter(
-            torch.Tensor([0])
+            torch.log(torch.Tensor([0.25]))
         )
+        # self.logsigma_prior.requires_grad=False
         self.register_buffer(
             'eucli_dist_array_latent_size',
             torch.empty(
@@ -83,7 +85,7 @@ class VAE_GRF(VAE):
         mu_col = mu_.reshape(mu_.shape[0], mu_.shape[1], -1)
         var_ = self.logvar.exp()
 
-        range_ = torch.exp(self.logrange_prior.detach())
+        range_ = torch.exp(self.logrange_prior).detach()
         range_ /= 8
         covar_base_prior = self.corr_fct(
             array='eucli_dist_array_latent_size',
@@ -96,7 +98,6 @@ class VAE_GRF(VAE):
             inv_covar_base_prior,
             mu_
         ).reshape(mu_.shape[0], mu_.shape[1], -1)
-        #).transpose(-1, -2).reshape(mu_.shape[0], mu_.shape[1], -1, 1)
 
         return 0.5 * 1 / (self.latent_img_size ** 2) * torch.mean(
             # log det \Sigma
@@ -105,10 +106,7 @@ class VAE_GRF(VAE):
 
             # Tr(\Sigma^-1 m m.T)
             torch.sum(
-                torch.mul(
-                    invSigma_times_mu_col,
-                    mu_col
-                ),
+                invSigma_times_mu_col * mu_col,
                 dim=(-1)
             ).squeeze() -
 
@@ -128,29 +126,36 @@ class VAE_GRF(VAE):
     def loglikelihood_prior(self, x):
         covar_base_prior = self.corr_fct(
             array='eucli_dist_array_img_size',
-        )
+        )[None, None]
         inv_covar_base_prior = self.get_base_invert(covar_base_prior)
 
-        x = rgb_to_grayscale(x)
-        mu = torch.mean(x, dim=(-1, -2, -3))
+        #x = rgb_to_grayscale(x)
 
-        x_norm = x - mu[:, None, None, None]
-        x_norm_col = torch.transpose(x_norm, -1, -2).reshape(
-            x.shape[0], x.shape[1], -1
-        )
+        sum_llkh_by_channels = 0
+        for i in range(x.shape[1]):
+            x_ = x[:, i, :, :]
+            mu = torch.mean(x_, dim=(-1, -2))
 
-        invSigma_times_x_norm_col = self.get_matrix_vector_product(
-            inv_covar_base_prior,
-            x_norm
-        ).transpose(-1, -2).reshape(x_norm.shape[0], x_norm.shape[1], -1, 1)
+            x_norm = x_ - mu[:, None, None]
+            x_norm_col = x_norm.reshape(
+                x.shape[0], -1
+            )
 
-        return (- self.img_size ** 2 / 2 * torch.log(torch.tensor(2 *
-            3.1415927410125732))
-                - 0.5 * self.get_logdeterminant_base(covar_base_prior)
-                - 0.5 * torch.matmul(
-                    x_norm_col[:, :, None],
-                    invSigma_times_x_norm_col)
-                )
+            invSigma_times_x_norm_col = self.get_matrix_vector_product(
+                inv_covar_base_prior,
+                x_norm
+            ).reshape(x_norm.shape[0], -1)
+
+            sum_llkh_by_channels += 1/self.img_size**2 * torch.mean(- self.img_size ** 2 / 2 *
+                    torch.log(torch.tensor(2 * math.pi))
+                    - 0.5 *
+                    self.get_logdeterminant_base(covar_base_prior).squeeze()
+                    - 0.5 * torch.sum(
+                        x_norm_col *
+                        invSigma_times_x_norm_col, axis=(-1)
+                        )
+                    )
+        return sum_llkh_by_channels
 
     def loss_function(self, recon_x, x):
         rec_term = self.xent_continuous_ber(recon_x, x)
@@ -324,5 +329,7 @@ class VAE_GRF(VAE):
         '''
         lx, ly = covar_bases.shape[-1], covar_bases.shape[-2]
         B = np.sqrt(lx * ly) * torch.fft.fft2(covar_bases, norm="ortho")
-        logdet = torch.sum(torch.log(torch.real(B) + 1e-6), dim=(-2, -1))
+        logdet = torch.sum(torch.log(
+            (torch.real(B)) + 1e-6
+            ), dim=(-2, -1))
         return logdet

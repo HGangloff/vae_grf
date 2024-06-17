@@ -18,7 +18,7 @@ from utils import (get_train_dataloader,
                    parse_args
                    )
 
-def train(model, train_loader, device, optimizer, epoch):
+def train(model, train_loader, device, optimizer, epoch, optimizer2=None):
 
     model.train()
     train_loss = 0
@@ -26,9 +26,11 @@ def train(model, train_loader, device, optimizer, epoch):
 
     for batch_idx, (input_mb, lbl) in enumerate(train_loader):
         print(batch_idx + 1, end=", ", flush=True)
-        input_mb = input_mb.to(device) 
-        lbl = lbl.to(device) 
+        input_mb = input_mb.to(device)
+        lbl = lbl.to(device)
         optimizer.zero_grad() # otherwise grads accumulate in backward
+        if optimizer2 is not None:
+            optimizer2.zero_grad()
 
         loss, recon_mb, loss_dict_new = model.step(
             input_mb
@@ -37,9 +39,10 @@ def train(model, train_loader, device, optimizer, epoch):
         (-loss).backward()
         train_loss += loss.item()
         loss_dict = update_loss_dict(loss_dict, loss_dict_new)
-        print(loss_dict)
         optimizer.step()
-    nb_mb_it = (len(train_loader.dataset) // input_mb.shape[0])
+        if optimizer2 is not None:
+            optimizer2.step()
+    nb_mb_it = len(train_loader.dataset) // input_mb.shape[0]
     train_loss /= nb_mb_it
     loss_dict = {k:v / nb_mb_it for k, v in loss_dict.items()}
     return train_loss, input_mb, recon_mb, loss_dict, lbl
@@ -47,7 +50,7 @@ def train(model, train_loader, device, optimizer, epoch):
 
 def eval(model, test_loader, device):
     model.eval()
-    input_mb, gt_mb = iter(test_loader).next()
+    input_mb, gt_mb = next(iter(test_loader))
     gt_mb = gt_mb.to(device)
     input_mb = input_mb.to(device)
     recon_mb, opt_out = model(input_mb)
@@ -79,7 +82,7 @@ def main(args):
     batch_size = args.batch_size
     batch_size_test = args.batch_size_test
 
-    print("Nb channels", nb_channels, "img_size", img_size, 
+    print("Nb channels", nb_channels, "img_size", img_size,
         "mini batch size", batch_size)
 
 
@@ -108,7 +111,8 @@ def main(args):
         print("Starting training")
         #print([p for p in model.parameters()])
         if args.model == "vae_grf":
-            parameter_names = ['logsigma_prior', 'logrange_prior', 'mu_prior']
+            #parameter_names = ['logrange_prior']
+            parameter_names = ['logsigma_prior', 'logrange_prior']
             base_params = [p[1] for p in filter(
                     lambda p: ((p[0] not in parameter_names) and
                         (p[1].requires_grad)),
@@ -120,35 +124,56 @@ def main(args):
                     model.named_parameters()
                     )]
             optimizer = torch.optim.Adam(
-                [{'params':base_params},
-                {'params':vae_params,
-                    'lr':100*args.lr
-                    }
-                ],
+                #[{'params':base_params},
+                #{'params':vae_params,
+                #    'lr':args.lr
+                #    }
+                #],
+                base_params,
                 lr=args.lr
+            )
+            optimizer2 = torch.optim.Rprop(
+                vae_params,
+                lr=1e-10
             )
         else:
             optimizer = torch.optim.Adam(
                 model.parameters(),
                 lr=args.lr
             )
+            optimizer2 = None
         for epoch in range(args.num_epochs):
             print("Epoch", epoch + 1)
+            #if epoch < 10:
+            #    loss, input_mb, recon_mb, loss_dict, lbl = train(
+            #        model=model,
+            #        train_loader=train_dataloader,
+            #        device=device,
+            #        optimizer=optimizer,
+            #        epoch=epoch,
+            #        optimizer2=None)
+            #else:
             loss, input_mb, recon_mb, loss_dict, lbl = train(
                 model=model,
                 train_loader=train_dataloader,
                 device=device,
                 optimizer=optimizer,
-                epoch=epoch)
+                epoch=epoch,
+                optimizer2=optimizer2)
             print('epoch [{}/{}], train loss: {:.4f}'.format(
                 epoch + 1, args.num_epochs, loss))
+            try:
+                print(f"VAEGRF estimated range={torch.exp(model.logrange_prior)}"
+                      f" sigma={torch.exp(model.logsigma_prior) ** 2}")
+            except AttributeError:
+                pass
 
             # print loss logs
             f_name = os.path.join(out_dir, f"{args.exp}_loss_values.txt")
             print_loss_logs(f_name, out_dir, loss_dict, epoch, args.exp)
                     
             # save model parameters
-            if (epoch + 1) % 100 == 0 or epoch in [0, 4, 9, 24]:
+            if (epoch + 1) % 100 == 0 or epoch in [0, 4, 9, 24, 49]:
                 # to resume a training optimizer state dict and epoch
                 # should also be saved
                 torch.save(model.state_dict(), os.path.join(
@@ -172,7 +197,7 @@ def main(args):
                 input_test_mb, recon_test_mb, _, opt_out = eval(model=model,
                     test_loader=test_dataloader,
                     device=device)
-                    
+                
                 model.train()
                 img_test = utils.make_grid(
                     torch.cat((

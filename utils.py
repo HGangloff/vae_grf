@@ -77,7 +77,14 @@ def load_model_parameters(model, file_name, dir1, dir2, device):
     return model
 
 def get_train_dataloader(args, fake_dataset_size=None):
-    if args.dataset == "livestock":
+    if args.dataset == "mvtec":
+        train_dataset = MVTEC_train_Dataset(
+            args.img_size,
+            args.category,
+            fake_dataset_size=1024 if fake_dataset_size is None else
+                fake_dataset_size,
+        )
+    elif args.dataset == "livestock":
         train_dataset = LivestockTrainDataset(
             args.img_size,
             fake_dataset_size=1024 if fake_dataset_size is None else
@@ -92,7 +99,13 @@ def get_train_dataloader(args, fake_dataset_size=None):
     return train_dataloader, train_dataset
 
 def get_test_dataloader(args, fake_dataset_size=30, with_loc=False):
-    if args.dataset == "livestock":
+    if args.dataset == "mvtec":
+        test_dataset = MVTEC_test_Dataset(
+            args.img_size,
+            args.category,
+            args.defect
+            )
+    elif args.dataset == "livestock":
         test_dataset = LivestockTestDataset(
             args.img_size,
             fake_dataset_size=512 if fake_dataset_size is None else

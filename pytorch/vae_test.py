@@ -1,4 +1,6 @@
 import os
+import sys
+sys.path.insert(0, "../") 
 import time
 import argparse
 import numpy as np
@@ -24,12 +26,12 @@ def ssim(a, b, win_size):
 
     try:
         score, full = structural_similarity(a, b, #multichannel=True,
-            channel_axis=2, full=True, win_size=win_size)
+            channel_axis=2, full=True, win_size=win_size, data_range=1)
     except ValueError: # different version of scikit img
         score, full = structural_similarity(a, b, multichannel=True,
-            channel_axis=2, full=True, win_size=win_size)
+            channel_axis=2, full=True, win_size=win_size, data_range=1)
     #return 1 - score, np.median(1 - full, axis=2)  # Return disim = (1 - sim)
-    return 1 - score, np.product((1 - full), axis=2)
+    return 1 - score, np.prod((1 - full), axis=2)
 
 def get_error_pixel_wise(model, x, loss="rec_loss"):
     x_rec, _ = model(x)
@@ -91,10 +93,11 @@ def test(args):
 
     aucs = []
 
+    print(test_dataloader)
     pbar = tqdm(test_dataloader)
     for imgs, gt in pbar:
         imgs = imgs.to(device)
-        if args.dataset in ["livestock"]:
+        if args.dataset in ["mvtec", "livestock"]:
             # gt is a segmentation mask
             gt_np = gt[0].permute(1, 2, 0).cpu().numpy()[..., 0]
             gt_np = (gt_np - np.amin(gt_np)) / (np.amax(gt_np) - np.amin(gt_np))
@@ -103,6 +106,8 @@ def test(args):
             x_rec = get_error_pixel_wise(model, imgs)
             x_rec = model.mean_from_lambda(x_rec)
 
+        if args.dataset == "mvtec":
+            score, ssim_map = dissimilarity_func(x_rec[0], imgs[0], 15)
         if args.dataset == "livestock":
             score, ssim_map = dissimilarity_func(x_rec[0], imgs[0], 11)
 
@@ -129,12 +134,12 @@ def test(args):
         #amaps = ssim_map
 
         # MAD*SM metric
-        #amaps = mad * ssim_map
+        amaps = mad * ssim_map
 
         amaps = ((amaps - np.amin(amaps)) / (np.amax(amaps)
             - np.amin(amaps)))
 
-        if args.dataset in ["livestock"]:
+        if args.dataset in ["mvtec", "livestock"]:
             preds = amaps.copy() 
             mask = np.zeros(gt_np.shape)
 
@@ -171,7 +176,7 @@ def test(args):
 if __name__ == "__main__":
     args = parse_args()
 
-    if args.dataset == "livestock":
+    if args.dataset in ["mvtec", "livestock"]:
         m_auc = test(
             args,
             )
