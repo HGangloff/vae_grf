@@ -21,6 +21,8 @@ class VAE_GRF(VAE):
         ## if we have p(z)=N(z,\mu,\Sigma)
         if self.corr_type == "corr_exp":
             self.corr_fct = self.corr_exp
+        elif self.corr_type == "corr_gauss":
+            self.corr_fct = self.corr_gauss
         elif self.corr_type == "corr_m32":
             self.corr_fct = self.corr_matern_32
         # if we have p(z)=N(z,0,1)
@@ -33,9 +35,9 @@ class VAE_GRF(VAE):
             torch.log(torch.Tensor([1]))
         )
         self.logsigma_prior = nn.Parameter(
-            torch.log(torch.Tensor([0.25]))
+            torch.log(torch.Tensor([0.1]))
         )
-        # self.logsigma_prior.requires_grad=False
+        #self.logsigma_prior.requires_grad=False
         self.register_buffer(
             'eucli_dist_array_latent_size',
             torch.empty(
@@ -235,7 +237,6 @@ class VAE_GRF(VAE):
         sd[array] = d
         self.load_state_dict(sd)
 
-
     def corr_exp(self, array, logsigma=None, logrange=None):
         if logrange is None:
             range_ = torch.exp(self.logrange_prior)
@@ -250,9 +251,21 @@ class VAE_GRF(VAE):
         return (sigma2_ *
             torch.exp(-self.state_dict()[array] /
                 range_))
-        #return (sigma2_[None, None] *
-        #    torch.exp(-self.state_dict()[array][None] /
-        #        range_[None, None]))
+
+    def corr_gauss(self, array, logsigma=None, logrange=None):
+        if logrange is None:
+            range_ = torch.exp(self.logrange_prior)
+        else:
+            range_ = torch.exp(logrange)
+
+        if logsigma is None:
+            sigma2_ = torch.pow(torch.exp(self.logsigma_prior), 2)
+        else:
+            sigma2_ = torch.pow(torch.exp(logsigma), 2)
+
+        return (sigma2_ *
+            torch.exp(-(self.state_dict()[array] /
+                range_) ** 2))
 
     def corr_matern_32(self, array, logsigma=None, logrange=None):
         if logrange is None:
@@ -264,15 +277,10 @@ class VAE_GRF(VAE):
             sigma2_ = torch.pow(torch.exp(self.logsigma_prior), 2)
         else:
             sigma2_ = torch.pow(torch.exp(logsigma), 2)
-         
+
         return (sigma2_ *
                 (self.state_dict()[array] / range_ + 1) *
                 torch.exp(-self.state_dict()[array] / range_))
-        #return (sigma2_[None, None] *
-        #        (self.state_dict()[array][None] /
-        #        range_[None, None] + 1) *
-        #        torch.exp(-self.state_dict()[array][None] /
-        #        range_[None, None]))
 
     def corr_identity(self, array, logsigma=None, logrange=None):
         '''

@@ -93,6 +93,7 @@ def test(args):
 
     aucs = []
 
+    c = 0
     print(test_dataloader)
     pbar = tqdm(test_dataloader)
     for imgs, gt in pbar:
@@ -134,7 +135,7 @@ def test(args):
         #amaps = ssim_map
 
         # MAD*SM metric
-        amaps = mad * ssim_map
+        #amaps = mad * ssim_map
 
         amaps = ((amaps - np.amin(amaps)) / (np.amax(amaps)
             - np.amin(amaps)))
@@ -153,20 +154,22 @@ def test(args):
         m_aucs = np.mean(aucs)
         pbar.set_description(f"mean ROCAUC: {m_aucs:.3f}")
 
+        
         ori = imgs[0].permute(1, 2, 0).cpu().numpy()
         gt = gt[0].permute(1, 2, 0).cpu().numpy()
         rec = x_rec[0].detach().permute(1, 2, 0).cpu().numpy()
         path_to_save = args.dataset + '_predictions/'
         img_to_save = Image.fromarray((ori * 255).astype(np.uint8))
-        img_to_save.save(path_to_save + 'ori.png')
+        img_to_save.save(path_to_save + 'ori' + str(c) + '.png')
         img_to_save = Image.fromarray((gt_np * 255).astype(np.uint8))
-        img_to_save.save(path_to_save + 'gt.png')
+        img_to_save.save(path_to_save + 'gt' + str(c) + '.png')
         img_to_save = Image.fromarray((rec * 255).astype(np.uint8))
-        img_to_save.save(path_to_save + 'rec.png')
+        img_to_save.save(path_to_save + 'rec' + str(c) + '.png')
         cm = plt.get_cmap('jet')
         amaps = cm(amaps)
         img_to_save = Image.fromarray((amaps[..., :3] * 255).astype(np.uint8))
-        img_to_save.save(path_to_save + 'final_amap.png')
+        img_to_save.save(path_to_save + 'final_amap' + str(c) + '.png')
+        c += 1
 
     m_auc = np.mean(aucs)
     print("Mean auc on", args.category, args.defect, m_auc)
@@ -176,7 +179,47 @@ def test(args):
 if __name__ == "__main__":
     args = parse_args()
 
-    if args.dataset in ["mvtec", "livestock"]:
+    if args.dataset == 'mvtec':
+        all_defect_list = {
+            "wood": ["color", "combined", "hole", "liquid", "scratch"],
+            "hazelnut": ['hole', 'cut', "print", "crack"],
+            "pill": ["combined", "contamination", "crack", "color",
+                "faulty_imprint", "pill_type", "scratch"],
+            "leather": ["fold", "poke", "cut", "color", "glue"],
+            "carpet": ["color", "cut", "hole", "metal_contamination", "thread"],
+            "tile": ["glue_strip", "gray_stroke", "oil", "rough", "crack",
+            ],
+            "metal_nut": ["bent", "color", "flip", "scratch"],
+            "capsule":["faulty_imprint", "crack", "poke", "scratch", "squeeze"],
+            "cable":["bent_wire", "cable_swap", "combined", "cut_inner_insulation",
+            "cut_outer_insulation", "missing_cable", "missing_wire",
+            "poke_insulation"],
+            "bottle":["broken_large", "broken_small", "contamination"],
+            "toothbrush":["defective"],
+            "transistor":["cut_lead", "bent_lead", "damaged_case", "misplaced"],
+            "zipper":["broken_teeth", "combined", "fabric_border",
+            "fabric_interior", "rough", "split_teeth", "squeezed_teeth"],
+            "grid":["bent", "broken", "glue", "metal_contamination", "thread"],
+            "screw":["manipulated_front", "scratch_head", "scratch_neck",
+            "thread_side", "thread_top"],
+        }
+        if args.defect_list[0] == "all":
+            args.defect_list = all_defect_list[args.category]
+
+        m_aucs = {}
+        mu_, inv_sigma = None, None
+        for d in args.defect_list:
+            args.defect = d
+            m_auc = test(
+                args,
+            )
+
+            m_aucs[d] = m_auc
+
+        print("Mean auc on each defect", m_aucs)
+        print("Global mean auc for", args.category,
+            np.mean([v for v in m_aucs.values()]))
+    elif args.dataset in ["livestock"]:
         m_auc = test(
             args,
             )

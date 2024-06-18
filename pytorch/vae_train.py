@@ -42,6 +42,16 @@ def train(model, train_loader, device, optimizer, epoch, optimizer2=None):
         optimizer.step()
         if optimizer2 is not None:
             optimizer2.step()
+            logrange_prior = dict(model.named_parameters())["logrange_prior"]
+            logsigma_prior = dict(model.named_parameters())["logsigma_prior"]
+            if torch.exp(logrange_prior) < 0.1:
+                logrange_prior.data = np.log(0.1) * torch.ones_like(logrange_prior)
+            if torch.exp(logrange_prior) > 10:
+                logrange_prior.data = np.log(10.) * torch.ones_like(logrange_prior)
+            if torch.exp(logsigma_prior) < 0.001:
+                logsigma_prior.data = np.log(0.001) * torch.ones_like(logsigma_prior)
+            if torch.exp(logsigma_prior) > 5:
+                logsigma_prior.data = np.log(5.) * torch.ones_like(logsigma_prior)
     nb_mb_it = len(train_loader.dataset) // input_mb.shape[0]
     train_loss /= nb_mb_it
     loss_dict = {k:v / nb_mb_it for k, v in loss_dict.items()}
