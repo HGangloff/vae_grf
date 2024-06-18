@@ -4,7 +4,7 @@ python3 vae_train.py\
     --exp=VAEGRF_tile\
     --dataset=mvtec\
     --category=tile\
-    --lr=1e-4\
+    --lr=1e-3\
     --num_epochs=50\
     --img_size=256\
     --batch_size=16\

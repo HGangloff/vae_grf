@@ -48,8 +48,8 @@ def train(model, train_loader, device, optimizer, epoch, optimizer2=None):
                 logrange_prior.data = np.log(0.1) * torch.ones_like(logrange_prior)
             if torch.exp(logrange_prior) > 10:
                 logrange_prior.data = np.log(10.) * torch.ones_like(logrange_prior)
-            if torch.exp(logsigma_prior) < 0.001:
-                logsigma_prior.data = np.log(0.001) * torch.ones_like(logsigma_prior)
+            if torch.exp(logsigma_prior)  ** 2< 0.001:
+                logsigma_prior.data = np.log(np.sqrt(0.001)) * torch.ones_like(logsigma_prior)
             if torch.exp(logsigma_prior) > 5:
                 logsigma_prior.data = np.log(5.) * torch.ones_like(logsigma_prior)
     nb_mb_it = len(train_loader.dataset) // input_mb.shape[0]
@@ -223,4 +223,15 @@ def main(args):
 
 if __name__ == "__main__":
     args = parse_args()
-    main(args)
+    if args.category == "all":
+        for cat in ["wood", "hazelnut", "pill", "leather", "carpet", "tile",
+        "metal_nut", "capsule", "cable", "bottle", "toothbrush", "transistor",
+        "zipper", "grid", "screw"]:
+            args.category = cat
+            main(args)
+    if args.category == "all_restricted":
+        for cat in ["wood", "hazelnut", "leather", "carpet", "tile", "grid"]:
+            args.category = cat
+            main(args)
+    else:
+        main(args)

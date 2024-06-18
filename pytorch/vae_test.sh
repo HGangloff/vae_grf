@@ -1,9 +1,10 @@
 #!/bin/bash
 
 python3 vae_test.py\
-    --exp=VAEGRF_tile\
+    --exp=VAEGRF_leather\
     --dataset=mvtec\
-    --category=tile\
+    --category=leather\
+    --defect_list="all"\
     --lr=1e-3\
     --img_size=256\
     --batch_size=16\
@@ -14,4 +15,4 @@ python3 vae_test.py\
     --nb_channels=3\
     --model=vae_grf\
     --corr_type=corr_m32\
-    --params_id=25\
+    --params_id=50\
