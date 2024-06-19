@@ -178,7 +178,8 @@ def test(args):
 
 if __name__ == "__main__":
     args = parse_args()
-
+    args_exp_ini = args.exp
+    args.exp = args_exp_ini + "_" + args.category + "_" + args.corr_type + "_" + str(args.beta) + "_"
     if args.dataset == 'mvtec':
         all_defect_list = {
             "wood": ["color", "combined", "hole", "liquid", "scratch"],

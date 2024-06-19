@@ -223,15 +223,22 @@ def main(args):
 
 if __name__ == "__main__":
     args = parse_args()
+    args_exp_ini = args.exp
     if args.category == "all":
         for cat in ["wood", "hazelnut", "pill", "leather", "carpet", "tile",
         "metal_nut", "capsule", "cable", "bottle", "toothbrush", "transistor",
         "zipper", "grid", "screw"]:
+            print("\n\n" + cat)
             args.category = cat
+            args.exp = args_exp_ini + "_" + args.category + "_" + args.corr_type + "_" + str(args.beta) + "_"
             main(args)
     if args.category == "all_restricted":
         for cat in ["wood", "hazelnut", "leather", "carpet", "tile", "grid"]:
+            print("\n\n" + cat)
             args.category = cat
+            args.exp = args_exp_ini + "_" + args.category + "_" + args.corr_type + "_" + str(args.beta) + "_"
             main(args)
     else:
+        print("\n\n" + args.category)
+        args.exp = args_exp_ini + "_" + args.category + "_" + args.corr_type + "_" + str(args.beta) + "_"
         main(args)
