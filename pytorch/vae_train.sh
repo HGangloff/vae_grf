@@ -1,11 +1,11 @@
 #!/bin/bash
 
 python3 vae_train.py\
-    --exp=VAEGRF_tile\
+    --exp=VAEGRF\
     --dataset=mvtec\
-    --category=tile\
-    --lr=1e-3\
-    --num_epochs=50\
+    --category=all_restricted\
+    --lr=1e-4\
+    --num_epochs=1000\
     --img_size=256\
     --batch_size=16\
     --batch_size_test=8\

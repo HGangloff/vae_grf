@@ -132,10 +132,10 @@ def test(args):
         amaps = mad
 
         # SM metric
-        #amaps = ssim_map
+        amaps = ssim_map
 
         # MAD*SM metric
-        #amaps = mad * ssim_map
+        amaps = mad * ssim_map
 
         amaps = ((amaps - np.amin(amaps)) / (np.amax(amaps)
             - np.amin(amaps)))
@@ -179,7 +179,6 @@ def test(args):
 if __name__ == "__main__":
     args = parse_args()
     args_exp_ini = args.exp
-    args.exp = args_exp_ini + "_" + args.category + "_" + args.corr_type + "_" + str(args.beta) + "_"
     if args.dataset == 'mvtec':
         all_defect_list = {
             "wood": ["color", "combined", "hole", "liquid", "scratch"],
@@ -204,23 +203,39 @@ if __name__ == "__main__":
             "screw":["manipulated_front", "scratch_head", "scratch_neck",
             "thread_side", "thread_top"],
         }
-        if args.defect_list[0] == "all":
-            args.defect_list = all_defect_list[args.category]
+        all_categeories = list(all_defect_list.keys())
+        all_categeories_restricted = ["wood", "hazelnut", "leather", "carpet",
+                "tile", "grid"]
+        if args.category == 'all':
+            categories = all_categeories
+        if args.category == 'all_restricted':
+            categories = all_categeories_restricted
+        else:
+            categories = [args.category]
 
-        m_aucs = {}
-        mu_, inv_sigma = None, None
-        for d in args.defect_list:
-            args.defect = d
-            m_auc = test(
-                args,
-            )
+        for c in categories:
+            args.category = c
+            if args.defect_list[0] == "all":
+                defects = all_defect_list[args.category]
+            if not args.defect_list:
+                defects = [args.defect]
 
-            m_aucs[d] = m_auc
+            m_aucs = {}
+            mu_, inv_sigma = None, None
+            for d in defects:
+                args.defect = d
+                args.exp = args_exp_ini + "_" + args.category + "_" + args.corr_type + "_" + str(args.beta) + "_"
+                m_auc = test(
+                    args,
+                )
 
-        print("Mean auc on each defect", m_aucs)
-        print("Global mean auc for", args.category,
-            np.mean([v for v in m_aucs.values()]))
+                m_aucs[d] = m_auc
+
+            print("Mean auc on each defect", m_aucs)
+            print("Global mean auc for", args.category,
+                np.mean([v for v in m_aucs.values()]))
     elif args.dataset in ["livestock"]:
+        args.exp = args_exp_ini + "_" + args.category + "_" + args.corr_type + "_" + str(args.beta) + "_"
         m_auc = test(
             args,
             )
